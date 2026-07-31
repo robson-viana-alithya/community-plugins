@@ -138,9 +138,9 @@ export class LinguistBackendClient implements LinguistBackendApi {
 
     if (entitiesToAdd.length > 0) {
       this.logger?.info(`Adding ${entitiesToAdd.length} new entities`);
-      await Promise.all(
-        entitiesToAdd.map(entityRef => this.store.insertNewEntity(entityRef)),
-      );
+      entitiesToAdd.forEach(entityRef => {
+        this.store.insertNewEntity(entityRef);
+      });
     }
 
     if (entitiesToRemove.length > 0) {
@@ -234,17 +234,12 @@ export class LinguistBackendClient implements LinguistBackendApi {
       `Processing languages for entity ${entityRef} from ${url}`,
     );
 
-    let dir: string;
-    try {
-      const readTreeResponse = await this.urlReader.readTree(url);
-      dir = await readTreeResponse.dir();
-    } catch (error) {
-      await this.store.markEntityProcessed(entityRef, new Date());
-      throw error;
-    }
+    const readTreeResponse = await this.urlReader.readTree(url);
+    const dir = await readTreeResponse.dir();
+
+    const results = await this.getLinguistResults(dir);
 
     try {
-      const results = await this.getLinguistResults(dir);
       const totalBytes = results.languages.bytes;
       const langResults = results.languages.results;
 
@@ -277,15 +272,6 @@ export class LinguistBackendClient implements LinguistBackendApi {
       };
 
       return await this.store.insertEntityResults(entityResults);
-    } catch (error) {
-      try {
-        await this.store.markEntityProcessed(entityRef, new Date());
-      } catch (markError) {
-        this.logger?.error(
-          `Unable to mark "${entityRef}" as processed after failure: ${markError}`,
-        );
-      }
-      throw error;
     } finally {
       this.logger?.info(`Cleaning up files from ${dir}`);
       await fs.remove(dir);

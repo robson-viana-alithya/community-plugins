@@ -26,15 +26,14 @@ import {
 export type RawDbEntityResultRow = {
   id: string;
   entity_ref: string;
-  languages?: string | null;
-  processed_date?: Date | null;
+  languages?: string;
+  processed_date?: Date;
 };
 
 /** @public */
 export interface LinguistBackendStore {
   insertEntityResults(entityLanguages: EntityResults): Promise<string>;
   insertNewEntity(entityRef: string): Promise<void>;
-  markEntityProcessed(entityRef: string, processedDate: Date): Promise<void>;
   getEntityResults(entityRef: string): Promise<Languages>;
   getProcessedEntities(): Promise<ProcessedEntity[]>;
   getUnprocessedEntities(): Promise<string[]>;
@@ -83,20 +82,9 @@ export class LinguistBackendDatabase implements LinguistBackendStore {
       .insert({
         id: entityLanguageId,
         entity_ref: entityRef,
-        // Must be explicit because older SQLite schemas can still default this to NOW().
-        processed_date: null,
       })
       .onConflict('entity_ref')
       .ignore(); // If the entity_ref is in the table already then we don't want to add it again
-  }
-
-  async markEntityProcessed(
-    entityRef: string,
-    processedDate: Date,
-  ): Promise<void> {
-    await this.db<RawDbEntityResultRow>('entity_result')
-      .where({ entity_ref: entityRef })
-      .update({ processed_date: processedDate });
   }
 
   async getEntityResults(entityRef: string): Promise<Languages> {
@@ -123,9 +111,9 @@ export class LinguistBackendDatabase implements LinguistBackendStore {
   }
 
   async getProcessedEntities(): Promise<ProcessedEntity[]> {
-    const rawEntities = await this.db<RawDbEntityResultRow>(
-      'entity_result',
-    ).whereNotNull('processed_date');
+    const rawEntities = await this.db<RawDbEntityResultRow>('entity_result')
+      .whereNotNull('processed_date')
+      .whereNotNull('languages');
 
     if (!rawEntities) {
       return [];
@@ -156,8 +144,10 @@ export class LinguistBackendDatabase implements LinguistBackendStore {
 
   async getUnprocessedEntities(): Promise<string[]> {
     const rawEntities = await this.db<RawDbEntityResultRow>('entity_result')
+      // TODO(ahhhndre) processed_date should always be null as well but it had a default to the current date
+      // once the default has been removed and released, we can then come back an enable this check
+      // .whereNull('processed_date')
       .whereNull('languages')
-      .whereNull('processed_date')
       .orderBy('created_at', 'asc');
 
     if (!rawEntities) {
